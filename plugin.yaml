@@ -3,6 +3,7 @@ name: "multi-repo"
 version: "0.0.1"
 usage: "Allows use of multiple upstream repos, aids in local development workflows."
 description: |-
+  experimental multi repo wildcard support
   https://github.com/diclophis/helm-multi-repo
 command: "$HELM_PLUGIN_DIR/bin/downloader"
 downloaders:

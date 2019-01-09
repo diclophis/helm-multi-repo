@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
 
 #NOTE: will be invoked with the following scheme:
 #
@@ -8,52 +8,56 @@
 # plugin is expected to dump the raw content to stdout and report errors on stderr.
 #
 
-set -euo pipefail
+require 'yaml'
+require 'date'
 
-#set -x
+FULL_URL = ARGV[3]
 
-CERT_FILE=${1} # ???
-KEY_FILE=${2}
-CA_FILE=${3}
-FULL_URL=${4}
+REQ_FILE = File.basename(FULL_URL)
+REQ_PACKAGE = REQ_FILE.reverse.split("-", 2).last.reverse
 
-if [ -z "${FULL_URL}" ];
-then
-  echo missing arguments 1>&2
-  exit 1
-fi
+repos_file = File.join(ENV['HELM_PLUGIN_DIR'], "repos")
 
-REQ_FILE=${FULL_URL##*/}
-REQ_PACKAGE=${REQ_FILE%-*}
-MULTI_SANS_PROTO=${FULL_URL#*://*}
-MULTI_CONFIG=${MULTI_SANS_PROTO%/*}
-UPSTREAM_REPOS=${MULTI_CONFIG//\//\ }
+##NOTE: when helm repo update occurs, the index.yaml is concancated from all upstreams
+if REQ_FILE == "index.yaml"
+  MULTI_SANS_PROTO = File.dirname(FULL_URL.gsub("multi://", ""))
+  File.write(repos_file, MULTI_SANS_PROTO)
 
-#NOTE: when helm repo update occurs, the index.yaml is concancated from all upstreams
-if [[ "${MULTI_SANS_PROTO}" == *index.yaml ]]; then
-  for REPO in ${UPSTREAM_REPOS}
-  do
-    F="${HELM_HOME}/repository/cache/${REPO}-index.yaml"
-    cat ${F}
-  done
+  entries = {}
 
-  echo ${UPSTREAM_REPOS} > ${HELM_PLUGIN_DIR}/repos
+  MULTI_SANS_PROTO.strip.split("/").each do |repo|
+    f = File.join(ENV['HELM_HOME'], "repository", "cache", "#{repo}-index.yaml")
+    index = YAML.safe_load(File.read(f).gsub("created: ", "created: Z1234-X%%%%X-12 "), [Time, Date])
+
+    index["entries"].each do |repo, versions|
+      entries[repo] ||= []
+      entries[repo] += versions
+    end
+  end
+
+  combined_multi_repo_index_yaml = {"apiVersion" => "v1", "entries" => entries}.to_yaml(:canonical => false)
+  File.write("/var/tmp/cheese3", combined_multi_repo_index_yaml)
+  $stdout.write(combined_multi_repo_index_yaml.gsub("created: Z1234-X%%%%X-12 ", "created: "))
 
   exit
-fi
+end
 
-#NOTE: loop each known repo, #TODO: support map to parent conf
-for REPO in $(<"${HELM_PLUGIN_DIR}/repos")
-do
-  ${HELM_BIN} fetch -d ${HELM_PLUGIN_DIR}/bucket ${REPO}/${REQ_PACKAGE} || echo skipping 1>&2
+##NOTE: loop each known repo, #TODO: support map to parent conf
+##NOTE: there are gotchas with versioning support jumping across repos
+File.read(repos_file).strip.split("/").each do |repo|
+  tmp = File.join(repo, REQ_PACKAGE)
+  bucket = File.join(ENV['HELM_PLUGIN_DIR'], "bucket")
+  full_tmp = File.join(bucket, REQ_FILE)
 
-  if [ -s ${HELM_PLUGIN_DIR}/bucket/${REQ_FILE} ];
-  then
-    cat ${HELM_PLUGIN_DIR}/bucket/${REQ_FILE}
-    exit
-  fi
-done
+  helm_fetch_cmd = [ENV['HELM_BIN'], "fetch", "-d", bucket, tmp]
+  system(*helm_fetch_cmd)
 
-echo ${REQ_PACKAGE} not found 1>&2
+  if File.exists?(full_tmp)
+    $stdout.write(File.read(full_tmp))
+    exit 0
+  end
+end
+
+$stderr.write("#{REQ_FILE} not found")
 
 exit 1

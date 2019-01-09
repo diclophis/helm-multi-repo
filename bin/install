@@ -1,10 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
 
-set -euo pipefail
+require 'fileutils'
 
-#NOTE: we stash any fetched upstream packages here
-mkdir -p ${HELM_PLUGIN_DIR}/bucket
-
-echo multi-repo installed
-
-true
+FileUtils.mkdir_p(File.join(ENV["HELM_PLUGIN_DIR"], "bucket"))
