@@ -1,0 +1,14 @@
+---
+name: "multi-repo"
+version: "0.0.1"
+usage: "Allows use of multiple upstream repos, aids in local development workflows."
+description: |-
+  https://github.com/diclophis/helm-multi-repo
+command: "$HELM_PLUGIN_DIR/bin/downloader"
+downloaders:
+- command: "bin/downloader"
+  protocols:
+    - "multi"
+hooks:
+  install: "cd $HELM_PLUGIN_DIR; bin/install"
+  update: "cd $HELM_PLUGIN_DIR; bin/update"

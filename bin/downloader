@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+#NOTE: will be invoked with the following scheme:
+#
+#   command certFile keyFile caFile full-URL
+#
+# The SSL credentials are coming from the repo definition, stored in $HELM_HOME/repository/repositories.yaml.
+# plugin is expected to dump the raw content to stdout and report errors on stderr.
+#
+
+set -euo pipefail
+
+#set -x
+
+CERT_FILE=${1} # ???
+KEY_FILE=${2}
+CA_FILE=${3}
+FULL_URL=${4}
+
+if [ -z "${FULL_URL}" ];
+then
+  echo missing arguments 1>&2
+  exit 1
+fi
+
+REQ_FILE=${FULL_URL##*/}
+REQ_PACKAGE=${REQ_FILE%-*}
+MULTI_SANS_PROTO=${FULL_URL#*://*}
+MULTI_CONFIG=${MULTI_SANS_PROTO%/*}
+UPSTREAM_REPOS=${MULTI_CONFIG//\//\ }
+
+#NOTE: when helm repo update occurs, the index.yaml is concancated from all upstreams
+if [[ "${MULTI_SANS_PROTO}" == *index.yaml ]]; then
+  for REPO in ${UPSTREAM_REPOS}
+  do
+    F="${HELM_HOME}/repository/cache/${REPO}-index.yaml"
+    cat ${F}
+  done
+
+  echo ${UPSTREAM_REPOS} > ${HELM_PLUGIN_DIR}/repos
+
+  exit
+fi
+
+#NOTE: loop each known repo, #TODO: support map to parent conf
+for REPO in $(<"${HELM_PLUGIN_DIR}/repos")
+do
+  ${HELM_BIN} fetch -d ${HELM_PLUGIN_DIR}/bucket ${REPO}/${REQ_PACKAGE} || echo skipping 1>&2
+
+  if [ -s ${HELM_PLUGIN_DIR}/bucket/${REQ_FILE} ];
+  then
+    cat ${HELM_PLUGIN_DIR}/bucket/${REQ_FILE}
+    exit
+  fi
+done
+
+echo ${REQ_PACKAGE} not found 1>&2
+
+exit 1

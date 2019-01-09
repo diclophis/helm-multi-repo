@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+#NOTE: we stash any fetched upstream packages here
+mkdir -p ${HELM_PLUGIN_DIR}/bucket
+
+echo multi-repo installed
+
+true

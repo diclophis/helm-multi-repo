@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+#TODO: ???
+echo multi-repo updated
+
+true
